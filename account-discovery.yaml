@@ -1,0 +1,72 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  This template creates an S3 bucket, IAM role, and Lambda for account discovery
+Parameters:
+  S3BucketName:
+    Type: String
+    Default: "account-discovery-output"
+    Description: S3 bucket for lambda to write to
+  CreateNewBucket:
+    Type: String
+    AllowedValues:
+      - "true"
+      - "false"
+    Default: "true"
+    Description: Whether to create new S3 Bucket resource
+Conditions:
+  # Hub Account #
+  CreateNewBucketCondition: !Equals
+    - !Ref CreateNewBucket
+    - "true"
+Resources:
+  S3Bucket:
+    Condition: CreateNewBucketCondition
+    Type: AWS::S3::Bucket
+    Properties: 
+      BucketName: !Ref S3BucketName
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: True
+        BlockPublicPolicy: True
+        IgnorePublicAcls: True
+        RestrictPublicBuckets: True
+  IAMRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: s3-put
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: 's3:PutObject'
+                Resource: '*'
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/ReadOnlyAccess"
+        - "arn:aws:iam::aws:policy/service-role/AmazonS3ObjectLambdaExecutionRolePolicy"
+  LambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: Function that audits all AWS resources and writes to provided S3 bucket
+      FunctionName: account-discovery
+      Environment:
+        Variables:
+          S3_BUCKET: !Ref S3BucketName
+      Handler: account-discovery.main
+      Runtime: python3.9
+      Role: !GetAtt IAMRole.Arn
+      Timeout: 900
+      Code:
+        ZipFile: |
+          dummycode
